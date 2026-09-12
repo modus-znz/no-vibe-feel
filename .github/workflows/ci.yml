@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: shellcheck install.sh
+
+  markdownlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
+        with:
+          globs: "**/*.md"
+
+  validate-skills:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install skills-ref (pinned commit)
+        run: pip install "git+https://github.com/agentskills/agentskills@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref"
+      - name: Validate every skill against the Agent Skills spec
+        run: |
+          for skill in skills/*/; do
+            skills-ref validate "$skill"
+          done
+      - name: Check every skill renders into an agent prompt
+        run: skills-ref to-prompt skills/*/ > /dev/null
+      - name: Keep descriptions short enough for agent skill listings
+        run: |
+          python3 - <<'EOF'
+          import pathlib, re, sys
+
+          limit = 135
+          failed = False
+          for skill_md in sorted(pathlib.Path("skills").glob("*/SKILL.md")):
+              frontmatter = skill_md.read_text().split("---")[1]
+              match = re.search(r'^description:\s*"?(.*?)"?\s*$', frontmatter, re.M)
+              length = len(match.group(1)) if match else 0
+              if not match or length > limit:
+                  print(f"{skill_md}: description is {length} chars (limit {limit})")
+                  failed = True
+          sys.exit(failed)
+          EOF
+      - name: Check plugin manifests agree
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+
+          plugin = json.load(open(".claude-plugin/plugin.json"))
+          marketplace = json.load(open(".claude-plugin/marketplace.json"))
+          names = [entry["name"] for entry in marketplace["plugins"]]
+          if plugin["name"] not in names:
+              sys.exit(f"plugin {plugin['name']!r} missing from marketplace.json {names}")
+          EOF
+
+  installer-smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install into a HOME that contains a space
+        run: |
+          set -eu
+          fake_home="$RUNNER_TEMP/home with space"
+          mkdir -p "$fake_home/.claude/skills/no-vibe-feel" "$fake_home/.gemini"
+          touch "$fake_home/.claude/skills/no-vibe-feel/STALE.md"
+
+          HOME="$fake_home" ./install.sh
+
+          test -f "$fake_home/.claude/skills/no-vibe-feel/SKILL.md"
+          test ! -e "$fake_home/.claude/skills/no-vibe-feel/STALE.md"
+          test -f "$fake_home/.gemini/skills/no-vibe-feel-writing/references/stack-pocketguides.md"
+          test -z "$(git status --porcelain)"
+      - name: Dry run changes nothing
+        run: |
+          set -eu
+          fake_home="$RUNNER_TEMP/dry"
+          HOME="$fake_home" ./install.sh --dry-run claude | grep -q 'would run: cp'
+          test ! -e "$fake_home"
+      - name: Link, project, and uninstall modes
+        run: |
+          set -eu
+          fake_home="$RUNNER_TEMP/modes"
+          project="$RUNNER_TEMP/project"
+          mkdir -p "$project"
+
+          HOME="$fake_home" ./install.sh --link agents
+          test -L "$fake_home/.agents/skills/no-vibe-feel"
+
+          (cd "$project" && HOME="$fake_home" "$GITHUB_WORKSPACE/install.sh" --project claude)
+          test -f "$project/.claude/skills/no-vibe-feel/SKILL.md"
+
+          HOME="$fake_home" ./install.sh --uninstall agents
+          test ! -e "$fake_home/.agents/skills/no-vibe-feel"
+          test -f skills/no-vibe-feel/SKILL.md
+      - name: Refuse a tampered checkout
+        run: |
+          set -eu
+          clone="$RUNNER_TEMP/clone"
+          mkdir -p "$clone"
+          cp -R install.sh skills "$clone/"
+          ln -s /etc/passwd "$clone/skills/no-vibe-feel/linked"
+          if HOME="$RUNNER_TEMP/tamper" "$clone/install.sh" claude; then exit 1; fi
+          rm "$clone/skills/no-vibe-feel/linked"
+          touch "$clone/skills/no-vibe-feel/odd name.md"
+          if HOME="$RUNNER_TEMP/tamper" "$clone/install.sh" claude; then exit 1; fi
+      - name: Reject bad arguments
+        run: |
+          for args in "claude extra" "not-an-agent" "--bogus" "--project" "--link --uninstall claude"; do
+            # shellcheck disable=SC2086 # word-splitting the argument list is the point
+            if ./install.sh $args; then
+              echo "accepted: $args" >&2
+              exit 1
+            fi
+          done

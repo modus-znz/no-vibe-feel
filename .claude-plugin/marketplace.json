@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "no-vibe-feel",
+  "description": "Senior-engineer standards for AI coding agents, packaged as Agent Skills.",
+  "owner": {
+    "name": "modus-znz"
+  },
+  "plugins": [
+    {
+      "name": "no-vibe-feel",
+      "description": "Senior-engineer standards for AI coding agents: write-time gates, design decisions, repository habits, and a severity-graded code review.",
+      "author": {
+        "name": "modus-znz"
+      },
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

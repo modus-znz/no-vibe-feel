@@ -1,0 +1,21 @@
+# OS and editor state
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Tooling caches
+node_modules/
+.venv/
+__pycache__/
+
+# claude plugin eval output
+evals/results/

@@ -1,0 +1,14 @@
+{
+  "name": "no-vibe-feel",
+  "version": "1.1.0",
+  "description": "Senior-engineer standards for AI coding agents: write-time gates, design decisions, repository habits, and a severity-graded code review.",
+  "author": {
+    "name": "modus-znz",
+    "url": "https://github.com/modus-znz"
+  },
+  "homepage": "https://github.com/modus-znz/no-vibe-feel",
+  "repository": "https://github.com/modus-znz/no-vibe-feel",
+  "license": "MIT",
+  "keywords": ["agent-skills", "code-review", "code-quality", "senior-engineer"],
+  "skills": "./skills/"
+}

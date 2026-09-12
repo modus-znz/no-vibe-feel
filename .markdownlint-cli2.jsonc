@@ -1,0 +1,17 @@
+{
+  "config": {
+    // Prose is hand-wrapped and tables carry long cells; line length is not a defect here.
+    "MD013": false,
+    "MD060": false,
+    // Keep a Changelog and the stack guides repeat "Added" / "Vibe tells" under different parents.
+    "MD024": { "siblings_only": true }
+  },
+  // The PR template renders inside a PR body, and eval prompts and graders are
+  // inputs to an agent, not documents; an H1 would be wrong in both.
+  "ignores": [
+    "node_modules/**",
+    ".github/pull_request_template.md",
+    "evals/*/prompt.md",
+    "evals/*/graders/*.md"
+  ]
+}
